@@ -30,6 +30,35 @@ It also exposes diagnostic sensors for:
 - `Latest data` which is the last successful API poll time from Home Assistant
 - `Next hourly check` which is when the delayed last-hour poll is due next
 
+## HACS Installation
+
+1. Open HACS in Home Assistant.
+2. Open the menu in the top-right corner.
+3. Choose `Custom repositories`.
+4. Paste the GitHub repository URL for this project.
+5. Choose category `Integration`.
+6. Add the repository.
+7. Find `Kirk Hill Coop` in HACS and install it.
+8. Restart Home Assistant.
+9. Go to `Settings -> Devices & services`.
+10. Choose `Add integration`.
+11. Search for `Kirk Hill Coop`.
+12. Paste your read-only API key and finish setup.
+
+## Manual Installation
+
+If you do not want to use HACS yet, copy:
+
+`custom_components/kirk_hill_coop`
+
+into your Home Assistant config folder as:
+
+`custom_components/kirk_hill_coop`
+
+Then restart Home Assistant and add the integration from:
+
+`Settings -> Devices & services -> Add integration`
+
 ## Behaviour
 
 The integration requests the `today` range on a fixed hourly schedule. Home
@@ -65,35 +94,6 @@ in Home Assistant. No YAML configuration or environment file will be required.
 | API key | Yes | None | Setup cannot continue; the key is validated against the read-only API. |
 | Data scope | No | `owner` | Uses the API key holder's share rather than the whole site. |
 
-## HACS Installation
-
-1. Open HACS in Home Assistant.
-2. Open the menu in the top-right corner.
-3. Choose `Custom repositories`.
-4. Paste the GitHub repository URL for this project.
-5. Choose category `Integration`.
-6. Add the repository.
-7. Find `Kirk Hill Coop` in HACS and install it.
-8. Restart Home Assistant.
-9. Go to `Settings -> Devices & services`.
-10. Choose `Add integration`.
-11. Search for `Kirk Hill Coop`.
-12. Paste your read-only API key and finish setup.
-
-## Manual Installation
-
-If you do not want to use HACS yet, copy:
-
-`custom_components/kirk_hill_coop`
-
-into your Home Assistant config folder as:
-
-`custom_components/kirk_hill_coop`
-
-Then restart Home Assistant and add the integration from:
-
-`Settings -> Devices & services -> Add integration`
-
 ## Before You Install
 
 It is worth testing the API key outside Home Assistant first so you know any
@@ -109,24 +109,8 @@ with header:
 
 Postman worked well during development for this.
 
-## Development Notes
-
-`.env.example` documents the only development setting still kept in the repo:
-
-| Variable | Required | Behaviour when empty or omitted |
-| --- | --- | --- |
-| `KIRK_HILL_API_KEY` | Only for future live development tests | Live tests are skipped; normal Home Assistant use is unaffected. |
-
-Copy `.env.example` to `.env` only for local development. `.env` is ignored by
-Git and must never be committed.
-
 ## Notes
 
 Import status, API bucket, scope, and per-turbine details are attributes on the
 `Generation today` sensor.
 
-## API contract
-
-The local `openapi.yaml` is the source of truth for the cooperative API. It
-defines bearer authentication and the summary, generation, wind-speed, and
-turbine endpoints under `https://dashboard.kirkhillcoop.org/api/v1/`.
