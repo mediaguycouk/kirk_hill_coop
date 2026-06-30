@@ -5,8 +5,11 @@
 > [!WARNING]
 > This project is not production ready yet.
 > It is an in-progress custom integration for testing and iteration, and it may
-> change shape, miss edge cases, or break between updates. Use it only if you
-> are happy to test, troubleshoot, and accept rough edges.
+> change shape, miss edge cases, or break between updates. 
+> 
+> Use it only if you are happy to test, troubleshoot, and accept rough edges.
+>
+> This is not an official application from the Kirk Hill Coop
 
 Kirk Hill Coop is a HACS custom integration for importing generation, wind,
 and turbine data from the cooperative's read-only API into Home Assistant.
