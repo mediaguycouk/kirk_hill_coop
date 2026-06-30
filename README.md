@@ -14,6 +14,22 @@ and turbine data from the cooperative's read-only API into Home Assistant.
 The MVP provides UI setup, API-key validation, hourly updates, delayed
 whole-hour pulls, and Home Assistant sensor entities.
 
+## What You Get
+
+After installation, the integration creates sensors for:
+
+- `Generation today`
+- `Generation last hour`
+- `Wind speed`
+- `Capacity factor`
+- `Active turbines`
+- `Site capacity`
+
+It also exposes diagnostic sensors for:
+
+- `Latest data` which is the last successful API poll time from Home Assistant
+- `Next hourly check` which is when the delayed last-hour poll is due next
+
 ## Behaviour
 
 The integration requests the `today` range on a fixed hourly schedule. Home
@@ -49,7 +65,53 @@ in Home Assistant. No YAML configuration or environment file will be required.
 | API key | Yes | None | Setup cannot continue; the key is validated against the read-only API. |
 | Data scope | No | `owner` | Uses the API key holder's share rather than the whole site. |
 
-`.env.example` documents the only development setting:
+## HACS Installation
+
+1. Open HACS in Home Assistant.
+2. Open the menu in the top-right corner.
+3. Choose `Custom repositories`.
+4. Paste the GitHub repository URL for this project.
+5. Choose category `Integration`.
+6. Add the repository.
+7. Find `Kirk Hill Coop` in HACS and install it.
+8. Restart Home Assistant.
+9. Go to `Settings -> Devices & services`.
+10. Choose `Add integration`.
+11. Search for `Kirk Hill Coop`.
+12. Paste your read-only API key and finish setup.
+
+## Manual Installation
+
+If you do not want to use HACS yet, copy:
+
+`custom_components/kirk_hill_coop`
+
+into your Home Assistant config folder as:
+
+`custom_components/kirk_hill_coop`
+
+Then restart Home Assistant and add the integration from:
+
+`Settings -> Devices & services -> Add integration`
+
+## Before You Install
+
+It is worth testing the API key outside Home Assistant first so you know any
+setup problem is in the integration rather than the API itself.
+
+The simplest quick check is a request like:
+
+`https://dashboard.kirkhillcoop.org/api/v1/summary?range=today`
+
+with header:
+
+`Authorization: Bearer <your_api_key>`
+
+Postman worked well during development for this.
+
+## Development Notes
+
+`.env.example` documents the only development setting still kept in the repo:
 
 | Variable | Required | Behaviour when empty or omitted |
 | --- | --- | --- |
@@ -58,38 +120,10 @@ in Home Assistant. No YAML configuration or environment file will be required.
 Copy `.env.example` to `.env` only for local development. `.env` is ignored by
 Git and must never be committed.
 
-## Local smoke test
+## Notes
 
-Before installing into HACS, you can confirm that a real read-only API key
-works from this repository without involving Home Assistant.
-
-1. Copy `.env.example` to `.env`.
-2. Replace `KIRK_HILL_API_KEY` with your real read-only key.
-3. Run `python scripts/smoke_test.py`.
-
-Optional environment variables:
-
-| Variable | Required | Default | Behaviour when empty or omitted |
-| --- | --- | --- | --- |
-| `KIRK_HILL_SCOPE` | No | `owner` | Uses the API key holder's share. |
-| `KIRK_HILL_RANGE` | No | `today` | Uses the API's current-day range for the smoke test. |
-
-The smoke test prints a short summary showing whether the API responded, how
-many generation and wind points were returned, and the latest timestamps seen.
-It does not write any Home Assistant state or archive files.
-
-## Installation target
-
-HACS installs `custom_components/kirk_hill_coop` into Home Assistant. Add this
-repository as a custom integration repository in HACS, install it, restart Home
-Assistant, then add **Kirk Hill Coop** from **Settings > Devices & services**.
-
-The integration creates sensors for generation today, generation last hour,
-latest wind speed, capacity factor, active turbines, and site capacity.
-Diagnostic sensors expose the last successful API poll time and the next hourly
-check.
-Import status, API bucket, scope, and per-turbine details are attributes on
-the generation-today sensor.
+Import status, API bucket, scope, and per-turbine details are attributes on the
+`Generation today` sensor.
 
 ## API contract
 
