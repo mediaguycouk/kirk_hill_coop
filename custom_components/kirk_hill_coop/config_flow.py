@@ -12,6 +12,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import KirkHillApiError, KirkHillAuthenticationError, KirkHillHttpClient
 from .const import (
     CONF_API_KEY,
+    CONF_PRESUMED_NET_SAVING_RATE_PENCE,
     CONF_SCOPE,
     DEFAULT_SCOPE,
     DOMAIN,
@@ -70,11 +71,18 @@ class KirkHillOptionsFlow(OptionsFlow):
     # Human checked: No
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            cleaned = dict(user_input)
+            if cleaned.get(CONF_PRESUMED_NET_SAVING_RATE_PENCE) == "":
+                cleaned.pop(CONF_PRESUMED_NET_SAVING_RATE_PENCE, None)
+            return self.async_create_entry(title="", data=cleaned)
         current = {**self.config_entry.data, **self.config_entry.options}
         schema = vol.Schema(
             {
                 vol.Required(CONF_SCOPE, default=current.get(CONF_SCOPE, DEFAULT_SCOPE)): vol.In(VALID_SCOPES),
+                vol.Optional(
+                    CONF_PRESUMED_NET_SAVING_RATE_PENCE,
+                    default=current.get(CONF_PRESUMED_NET_SAVING_RATE_PENCE, ""),
+                ): vol.Any("", vol.Coerce(float)),
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)

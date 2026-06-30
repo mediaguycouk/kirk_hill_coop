@@ -15,7 +15,7 @@ from homeassistant.const import PERCENTAGE, UnitOfEnergy, UnitOfPower, UnitOfSpe
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, INTEGRATION_NAME
@@ -34,6 +34,45 @@ SENSORS = (
         translation_key="generation_last_hour",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="generation_yesterday_kwh",
+        translation_key="generation_yesterday",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="generation_this_month_kwh",
+        translation_key="generation_this_month",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="generation_last_month_kwh",
+        translation_key="generation_last_month",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="savings_yesterday_pence",
+        translation_key="savings_yesterday",
+        native_unit_of_measurement="p",
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="savings_this_month_pence",
+        translation_key="savings_this_month",
+        native_unit_of_measurement="p",
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="savings_last_month_pence",
+        translation_key="savings_last_month",
+        native_unit_of_measurement="p",
         state_class=SensorStateClass.MEASUREMENT,
     ),
     SensorEntityDescription(
@@ -69,6 +108,12 @@ SENSORS = (
         device_class=SensorDeviceClass.TIMESTAMP,
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
+    SensorEntityDescription(
+        key="next_past_data_check",
+        translation_key="next_past_data_check",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
 )
 
 
@@ -77,7 +122,7 @@ SENSORS = (
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry[KirkHillCoordinator],
-    async_add_entities: AddConfigEntryEntitiesCallback,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     async_add_entities(KirkHillSensor(entry.runtime_data, entry, description) for description in SENSORS)
 
@@ -118,8 +163,22 @@ class KirkHillSensor(CoordinatorEntity[KirkHillCoordinator], SensorEntity):
             return self.coordinator.data.last_hour_generation_kwh
         if key == "next_hourly_check":
             return self.coordinator.data.next_hourly_check
+        if key == "next_past_data_check":
+            return self.coordinator.data.next_past_data_check
         if key == "latest_generation_interval_end":
             return self.coordinator.data.last_successful_poll
+        if key == "generation_yesterday_kwh":
+            return self.coordinator.data.generation_yesterday_kwh
+        if key == "generation_this_month_kwh":
+            return self.coordinator.data.generation_this_month_kwh
+        if key == "generation_last_month_kwh":
+            return self.coordinator.data.generation_last_month_kwh
+        if key == "savings_yesterday_pence":
+            return self.coordinator.data.savings_yesterday_pence
+        if key == "savings_this_month_pence":
+            return self.coordinator.data.savings_this_month_pence
+        if key == "savings_last_month_pence":
+            return self.coordinator.data.savings_last_month_pence
         value = self.coordinator.data.summary.get(key)
         return value
 
@@ -140,4 +199,3 @@ class KirkHillSensor(CoordinatorEntity[KirkHillCoordinator], SensorEntity):
             "latest_import_status": self.coordinator.data.summary.get("latest_import_status"),
             "turbines": list(self.coordinator.data.turbines),
         }
-

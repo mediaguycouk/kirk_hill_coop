@@ -64,7 +64,7 @@ class KirkHillHttpClient:
         return {
             "Accept": "application/json",
             "Authorization": f"Bearer {self._api_key}",
-            "User-Agent": "Kirk Hill Coop Home Assistant/0.1.0",
+            "User-Agent": "Kirk Hill Coop Home Assistant/0.2.0",
         }
 
     # Omits the default owner scope because the live API already applies it implicitly.

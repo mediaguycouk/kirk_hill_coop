@@ -2,7 +2,7 @@
 # Human checked: No
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 
@@ -39,5 +39,13 @@ class KirkHillSnapshot:
     bucket: str | None = None
     last_hour_generation_kwh: float | None = None
     last_hour_window_end: datetime | None = None
+    generation_yesterday_kwh: float | None = None
+    generation_this_month_kwh: float | None = None
+    generation_last_month_kwh: float | None = None
+    savings_yesterday_pence: float | None = None
+    savings_this_month_pence: float | None = None
+    savings_last_month_pence: float | None = None
     next_hourly_check: datetime | None = None
+    next_past_data_check: datetime | None = None
+    completed_yesterday_date: date | None = None
     last_successful_poll: datetime | None = None

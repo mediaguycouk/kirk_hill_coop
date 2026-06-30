@@ -9,6 +9,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import KirkHillHttpClient
 from .const import (
     CONF_API_KEY,
+    CONF_PRESUMED_NET_SAVING_RATE_PENCE,
     CONF_SCOPE,
     DEFAULT_SCOPE,
 )
@@ -33,6 +34,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: KirkHillConfigEntry) -> 
         UtcTimeProvider(),
         hourly_minute,
         hourly_second,
+        options.get(CONF_PRESUMED_NET_SAVING_RATE_PENCE),
     )
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator

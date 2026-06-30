@@ -19,7 +19,8 @@
     "step": {
       "init": {
         "data": {
-          "scope": "Data scope"
+          "scope": "Data scope",
+          "presumed_net_saving_rate_pence": "Presumed net saving rate (pence per kWh)"
         }
       }
     }
@@ -27,12 +28,19 @@
   "entity": {"sensor": {
     "generation_today": {"name": "Generation today"},
     "generation_last_hour": {"name": "Generation last hour"},
+    "generation_yesterday": {"name": "Generation yesterday"},
+    "generation_this_month": {"name": "Generation this month"},
+    "generation_last_month": {"name": "Generation last month"},
+    "savings_yesterday": {"name": "Savings yesterday"},
+    "savings_this_month": {"name": "Savings this month"},
+    "savings_last_month": {"name": "Savings last month"},
     "wind_speed": {"name": "Wind speed"},
     "capacity_factor": {"name": "Capacity factor"},
     "active_turbines": {"name": "Active turbines"},
     "site_capacity": {"name": "Site capacity"},
     "latest_data": {"name": "Latest data"},
-    "next_hourly_check": {"name": "Next hourly check"}
+    "next_hourly_check": {"name": "Next hourly check"},
+    "next_past_data_check": {"name": "Next past data check"}
   }},
   "title": "Kirk Hill Coop"
 }
