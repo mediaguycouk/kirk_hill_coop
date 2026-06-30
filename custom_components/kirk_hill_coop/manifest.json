@@ -1,0 +1,11 @@
+{
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://dashboard.kirkhillcoop.org/api-docs",
+  "domain": "kirk_hill_coop",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "name": "Kirk Hill Coop",
+  "requirements": [],
+  "version": "0.1.0"
+}

@@ -1,0 +1,38 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "api_key": "API key",
+          "scope": "Data scope"
+        },
+        "description": "Enter the read-only API key from your Kirk Hill Coop account. The integration fetches today's summary and the most recently completed whole hour."
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not connect to the Kirk Hill API",
+      "invalid_auth": "The API key was rejected"
+    },
+    "abort": {"already_configured": "Kirk Hill Coop is already configured"}
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "scope": "Data scope"
+        }
+      }
+    }
+  },
+  "entity": {"sensor": {
+    "generation_today": {"name": "Generation today"},
+    "generation_last_hour": {"name": "Generation last hour"},
+    "wind_speed": {"name": "Wind speed"},
+    "capacity_factor": {"name": "Capacity factor"},
+    "active_turbines": {"name": "Active turbines"},
+    "site_capacity": {"name": "Site capacity"},
+    "latest_data": {"name": "Latest data"},
+    "next_hourly_check": {"name": "Next hourly check"}
+  }},
+  "title": "Kirk Hill Coop"
+}
