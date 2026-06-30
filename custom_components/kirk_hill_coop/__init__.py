@@ -1,8 +1,6 @@
 # Wires the Kirk Hill Coop config entry into Home Assistant platforms.
 # Human checked: No
 
-from datetime import timedelta
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -32,7 +30,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: KirkHillConfigEntry) -> 
         hass,
         api,
         options.get(CONF_SCOPE, DEFAULT_SCOPE),
-        timedelta(hours=1),
         UtcTimeProvider(),
         hourly_minute,
         hourly_second,

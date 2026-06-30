@@ -2,9 +2,11 @@
 # Human checked: No
 
 from datetime import UTC, datetime
+from unittest.mock import Mock
 
 import pytest
 
+from custom_components.kirk_hill_coop import coordinator as coordinator_module
 from custom_components.kirk_hill_coop.coordinator import KirkHillCoordinator
 from custom_components.kirk_hill_coop.models import GenerationPoint, KirkHillSnapshot, WindSpeedPoint
 
@@ -58,7 +60,6 @@ async def test_first_update_fetches_latest_eligible_hour_before_threshold() -> N
         hass=None,
         api=api,
         scope="owner",
-        update_interval=None,
         time_provider=FakeTimeProvider(datetime(2026, 6, 30, 15, 20, tzinfo=UTC)),
         hourly_minute=42,
         hourly_second=30,
@@ -89,7 +90,6 @@ async def test_hourly_archive_uses_previous_whole_bst_hour() -> None:
         hass=None,
         api=api,
         scope="owner",
-        update_interval=None,
         time_provider=FakeTimeProvider(datetime(2026, 6, 30, 15, 42, 30, tzinfo=UTC)),
         hourly_minute=42,
         hourly_second=30,
@@ -116,7 +116,6 @@ async def test_hourly_archive_uses_previous_whole_gmt_hour() -> None:
         hass=None,
         api=api,
         scope="owner",
-        update_interval=None,
         time_provider=FakeTimeProvider(datetime(2026, 1, 30, 12, 42, 30, tzinfo=UTC)),
         hourly_minute=42,
         hourly_second=30,
@@ -138,6 +137,30 @@ def test_next_hourly_check_rolls_to_next_gmt_hour() -> None:
     assert next_hourly_check(datetime(2026, 1, 30, 12, 42, 30, tzinfo=UTC), 42, 30) == datetime(
         2026, 1, 30, 13, 42, 30, tzinfo=UTC
     )
+
+
+# Confirms the real refresh is aligned to the advertised delayed-check time rather than one hour after the last poll.
+# Human checked: No
+def test_schedule_refresh_targets_next_delayed_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured_when: list[datetime] = []
+
+    def _capture_schedule(hass, action, point_in_time):
+        captured_when.append(point_in_time)
+        return lambda: None
+
+    monkeypatch.setattr(coordinator_module, "async_track_point_in_utc_time", _capture_schedule)
+    coordinator = KirkHillCoordinator(
+        hass=Mock(),
+        api=FakeApi(),
+        scope="owner",
+        time_provider=FakeTimeProvider(datetime(2026, 6, 30, 19, 12, tzinfo=UTC)),
+        hourly_minute=53,
+        hourly_second=0,
+    )
+
+    coordinator._schedule_refresh()
+
+    assert captured_when == [datetime(2026, 6, 30, 19, 53, tzinfo=UTC)]
 
 
 # Builds one consistent snapshot for both named and custom API test doubles.

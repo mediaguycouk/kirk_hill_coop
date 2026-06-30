@@ -3,7 +3,8 @@
 
 import logging
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import KirkHillApiClient, KirkHillApiError
@@ -11,7 +12,6 @@ from .const import DOMAIN, RUNTIME_RANGE
 from .history import (
     build_latest_eligible_hour_window,
     next_hourly_check,
-    should_archive_previous_hour,
 )
 from .models import KirkHillSnapshot
 from .time import TimeProvider
@@ -31,18 +31,36 @@ class KirkHillCoordinator(DataUpdateCoordinator[KirkHillSnapshot]):
         hass: HomeAssistant,
         api: KirkHillApiClient,
         scope: str,
-        update_interval,
         time_provider: TimeProvider,
         hourly_minute: int,
         hourly_second: int,
     ) -> None:
-        super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=update_interval)
+        super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=None)
         self._api = api
         self._time_provider = time_provider
         self.scope = scope
         self._hourly_minute = hourly_minute
         self._hourly_second = hourly_second
         self._last_hour_window_key: str | None = None
+
+    # Schedules the next refresh for the exact advertised delayed-check timestamp instead of one hour from startup.
+    # Human checked: No
+    @callback
+    def _schedule_refresh(self) -> None:
+        if self.config_entry and self.config_entry.pref_disable_polling:
+            return
+
+        self._async_unsub_refresh()
+        scheduled_check = next_hourly_check(
+            self._time_provider.now(),
+            self._hourly_minute,
+            self._hourly_second,
+        )
+        self._unsub_refresh = async_track_point_in_utc_time(
+            self.hass,
+            self._handle_refresh_interval,
+            scheduled_check,
+        )
 
     # Refreshes today and, once the delayed trigger has passed, also refreshes the previous whole hour.
     # Human checked: No
