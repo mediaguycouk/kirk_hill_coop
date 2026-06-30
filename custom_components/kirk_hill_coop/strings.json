@@ -7,15 +7,29 @@
           "scope": "Data scope"
         },
         "description": "Enter the read-only API key from your Kirk Hill Coop account. The integration fetches today's summary and the most recently completed whole hour."
+      },
+      "reconfigure": {
+        "data": {
+          "api_key": "API key",
+          "scope": "Data scope",
+          "presumed_net_saving_rate_pence": "Presumed net saving rate (pence per kWh)"
+        }
       }
     },
     "error": {
       "cannot_connect": "Could not connect to the Kirk Hill API",
-      "invalid_auth": "The API key was rejected"
+      "invalid_auth": "The API key was rejected",
+      "invalid_savings_rate": "Enter a valid number of pence per kWh"
     },
-    "abort": {"already_configured": "Kirk Hill Coop is already configured"}
+    "abort": {
+      "already_configured": "Kirk Hill Coop is already configured",
+      "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]"
+    }
   },
   "options": {
+    "error": {
+      "invalid_savings_rate": "Enter a valid number of pence per kWh"
+    },
     "step": {
       "init": {
         "data": {

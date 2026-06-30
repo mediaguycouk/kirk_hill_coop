@@ -34,46 +34,52 @@ SENSORS = (
         translation_key="generation_last_hour",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.MEASUREMENT,
+        state_class=SensorStateClass.TOTAL,
     ),
     SensorEntityDescription(
         key="generation_yesterday_kwh",
         translation_key="generation_yesterday",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.MEASUREMENT,
+        state_class=SensorStateClass.TOTAL,
     ),
     SensorEntityDescription(
         key="generation_this_month_kwh",
         translation_key="generation_this_month",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.MEASUREMENT,
+        state_class=SensorStateClass.TOTAL,
     ),
     SensorEntityDescription(
         key="generation_last_month_kwh",
         translation_key="generation_last_month",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.MEASUREMENT,
+        state_class=SensorStateClass.TOTAL,
     ),
     SensorEntityDescription(
         key="savings_yesterday_pence",
         translation_key="savings_yesterday",
-        native_unit_of_measurement="p",
-        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="GBP",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        suggested_display_precision=2,
     ),
     SensorEntityDescription(
         key="savings_this_month_pence",
         translation_key="savings_this_month",
-        native_unit_of_measurement="p",
-        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="GBP",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        suggested_display_precision=2,
     ),
     SensorEntityDescription(
         key="savings_last_month_pence",
         translation_key="savings_last_month",
-        native_unit_of_measurement="p",
-        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="GBP",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        suggested_display_precision=2,
     ),
     SensorEntityDescription(
         key="wind_speed_mps",
@@ -92,9 +98,10 @@ SENSORS = (
     SensorEntityDescription(
         key="site_capacity_watts",
         translation_key="site_capacity",
-        native_unit_of_measurement=UnitOfPower.WATT,
+        native_unit_of_measurement=UnitOfPower.MEGA_WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
     ),
     SensorEntityDescription(
         key="latest_generation_interval_end",
@@ -174,11 +181,13 @@ class KirkHillSensor(CoordinatorEntity[KirkHillCoordinator], SensorEntity):
         if key == "generation_last_month_kwh":
             return self.coordinator.data.generation_last_month_kwh
         if key == "savings_yesterday_pence":
-            return self.coordinator.data.savings_yesterday_pence
+            return _pence_to_pounds(self.coordinator.data.savings_yesterday_pence)
         if key == "savings_this_month_pence":
-            return self.coordinator.data.savings_this_month_pence
+            return _pence_to_pounds(self.coordinator.data.savings_this_month_pence)
         if key == "savings_last_month_pence":
-            return self.coordinator.data.savings_last_month_pence
+            return _pence_to_pounds(self.coordinator.data.savings_last_month_pence)
+        if key == "site_capacity_watts":
+            return _watts_to_megawatts(self.coordinator.data.summary.get(key))
         value = self.coordinator.data.summary.get(key)
         return value
 
@@ -199,3 +208,19 @@ class KirkHillSensor(CoordinatorEntity[KirkHillCoordinator], SensorEntity):
             "latest_import_status": self.coordinator.data.summary.get("latest_import_status"),
             "turbines": list(self.coordinator.data.turbines),
         }
+
+
+# Converts stored pence totals into pounds for the user-facing savings sensors.
+# Human checked: No
+def _pence_to_pounds(value: float | None) -> float | None:
+    if value is None:
+        return None
+    return value / 100
+
+
+# Converts the API's raw watt value into megawatts for a more readable default display.
+# Human checked: No
+def _watts_to_megawatts(value: Any) -> float | None:
+    if value is None:
+        return None
+    return float(value) / 1_000_000
