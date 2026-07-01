@@ -72,6 +72,35 @@ def test_site_capacity_sensor_uses_megawatts() -> None:
     assert _sensor("site_capacity_watts", coordinator, entry).native_value == 18.8
 
 
+# Confirms live diagnostics and current power sensors read from the current-endpoint fields.
+# Human checked: No
+def test_live_sensors_use_current_payload_fields() -> None:
+    coordinator = Mock()
+    coordinator.scope = "owner"
+    coordinator.data = _snapshot(
+        current_summary={
+            "total_power_kw": 0.202,
+            "wind_speed_mps": 4.96,
+            "capacity_factor_percent": 9.47,
+            "active_turbines": 8,
+            "site_capacity_watts": 18_800_000,
+        },
+        current_reading={"generated_at": "2026-07-01T13:31:11Z", "source_interval": "1m", "complete": True},
+        next_latest_check=datetime(2026, 7, 1, 13, 42, 30, tzinfo=UTC),
+        last_poll=datetime(2026, 7, 1, 13, 27, 30, tzinfo=UTC),
+    )
+    entry = Mock(entry_id="entry-1")
+
+    assert _sensor("total_power_kw", coordinator, entry).native_value == 0.202
+    assert _sensor("wind_speed_mps", coordinator, entry).native_value == 4.96
+    assert _sensor("capacity_factor_percent", coordinator, entry).native_value == 9.47
+    assert _sensor("active_turbines", coordinator, entry).native_value == 8
+    assert _sensor("last_poll", coordinator, entry).native_value == datetime(2026, 7, 1, 13, 27, 30, tzinfo=UTC)
+    assert _sensor("next_latest_check", coordinator, entry).native_value == datetime(
+        2026, 7, 1, 13, 42, 30, tzinfo=UTC
+    )
+
+
 # Confirms the non-live energy totals use Home Assistant's allowed energy state classes.
 # Human checked: No
 def test_energy_total_sensors_use_total_state_class() -> None:
@@ -108,6 +137,10 @@ def _snapshot(
     savings_this_month_pence: float | None = None,
     savings_last_month_pence: float | None = None,
     site_capacity_watts: int | None = None,
+    current_summary: dict | None = None,
+    current_reading: dict | None = None,
+    next_latest_check: datetime | None = None,
+    last_poll: datetime | None = None,
     next_past_data_check: datetime | None = None,
 ) -> KirkHillSnapshot:
     stamp = datetime(2026, 6, 30, 10, tzinfo=UTC)
@@ -116,11 +149,15 @@ def _snapshot(
         generation=(GenerationPoint(stamp, 1),),
         wind_speed=(WindSpeedPoint(stamp, 8),),
         turbines=(),
+        current_reading=current_reading,
+        current_summary=current_summary,
         generation_yesterday_kwh=generation_yesterday_kwh,
         generation_this_month_kwh=generation_this_month_kwh,
         generation_last_month_kwh=generation_last_month_kwh,
         savings_yesterday_pence=savings_yesterday_pence,
         savings_this_month_pence=savings_this_month_pence,
         savings_last_month_pence=savings_last_month_pence,
+        next_latest_check=next_latest_check,
+        last_poll=last_poll,
         next_past_data_check=next_past_data_check,
     )

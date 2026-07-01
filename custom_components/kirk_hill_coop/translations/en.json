@@ -4,14 +4,17 @@
       "user": {
         "data": {
           "api_key": "API key",
-          "scope": "Data scope"
+          "scope": "Data scope",
+          "live_refresh_minutes": "Live refresh interval (minutes)",
+          "presumed_net_saving_rate_pence": "Presumed net saving rate (pence per kWh)"
         },
-        "description": "Enter the read-only API key from your Kirk Hill Coop account. The integration fetches today's summary and the most recently completed whole hour."
+        "description": "Enter the read-only API key from your Kirk Hill Coop account. The integration fetches current live readings plus delayed hourly and past-data totals."
       },
       "reconfigure": {
         "data": {
           "api_key": "API key",
           "scope": "Data scope",
+          "live_refresh_minutes": "Live refresh interval (minutes)",
           "presumed_net_saving_rate_pence": "Presumed net saving rate (pence per kWh)"
         }
       }
@@ -19,6 +22,7 @@
     "error": {
       "cannot_connect": "Could not connect to the Kirk Hill API",
       "invalid_auth": "The API key was rejected",
+      "invalid_live_refresh_minutes": "Choose a valid live refresh interval",
       "invalid_savings_rate": "Enter a valid number of pence per kWh"
     },
     "abort": {
@@ -34,12 +38,14 @@
       "init": {
         "data": {
           "scope": "Data scope",
+          "live_refresh_minutes": "Live refresh interval (minutes)",
           "presumed_net_saving_rate_pence": "Presumed net saving rate (pence per kWh)"
         }
       }
     }
   },
   "entity": {"sensor": {
+    "current_power": {"name": "Current power"},
     "generation_today": {"name": "Generation today"},
     "generation_last_hour": {"name": "Generation last hour"},
     "generation_yesterday": {"name": "Generation yesterday"},
@@ -52,7 +58,8 @@
     "capacity_factor": {"name": "Capacity factor"},
     "active_turbines": {"name": "Active turbines"},
     "site_capacity": {"name": "Site capacity"},
-    "latest_data": {"name": "Latest data"},
+    "last_poll": {"name": "Last poll"},
+    "next_latest_check": {"name": "Next poll"},
     "next_hourly_check": {"name": "Next hourly check"},
     "next_past_data_check": {"name": "Next past data check"}
   }},

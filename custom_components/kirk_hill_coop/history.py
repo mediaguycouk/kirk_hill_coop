@@ -59,6 +59,19 @@ def next_hourly_check(now: datetime, minute: int, second: int) -> datetime:
     return scheduled.astimezone(UTC)
 
 
+# Calculates the next live refresh time using the hourly anchor so live polling always hits the archive slot.
+# Human checked: No
+def next_live_check(now: datetime, minute: int, second: int, interval_minutes: int) -> datetime:
+    local_now = now.astimezone(UK_TZ)
+    candidate_minutes = _live_check_minutes(minute, interval_minutes)
+    for candidate_minute in candidate_minutes:
+        scheduled = local_now.replace(minute=candidate_minute, second=second, microsecond=0)
+        if scheduled > local_now:
+            return scheduled.astimezone(UTC)
+    next_hour = local_now.replace(minute=candidate_minutes[0], second=second, microsecond=0) + timedelta(hours=1)
+    return next_hour.astimezone(UTC)
+
+
 # Calculates the next post-midnight delayed check for yesterday and monthly totals.
 # Human checked: No
 def next_past_data_check(now: datetime, minute: int, second: int) -> datetime:
@@ -136,3 +149,10 @@ def _window_from_local_dates(start: date, end: date, key: str) -> HistoryWindow:
         datetime(end.year, end.month, end.day, tzinfo=UK_TZ),
         key,
     )
+
+
+# Lists the valid minute marks within an hour for one interval while keeping the hourly anchor as a required slot.
+# Human checked: No
+def _live_check_minutes(anchor_minute: int, interval_minutes: int) -> tuple[int, ...]:
+    base_minute = anchor_minute % interval_minutes
+    return tuple(range(base_minute, 60, interval_minutes))

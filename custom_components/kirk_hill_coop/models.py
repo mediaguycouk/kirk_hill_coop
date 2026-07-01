@@ -36,6 +36,9 @@ class KirkHillSnapshot:
     generation: tuple[GenerationPoint, ...]
     wind_speed: tuple[WindSpeedPoint, ...]
     turbines: tuple[dict[str, Any], ...]
+    current_reading: dict[str, Any] | None = None
+    current_summary: dict[str, Any] | None = None
+    current_turbines: tuple[dict[str, Any], ...] = ()
     bucket: str | None = None
     last_hour_generation_kwh: float | None = None
     last_hour_window_end: datetime | None = None
@@ -45,7 +48,8 @@ class KirkHillSnapshot:
     savings_yesterday_pence: float | None = None
     savings_this_month_pence: float | None = None
     savings_last_month_pence: float | None = None
+    next_latest_check: datetime | None = None
     next_hourly_check: datetime | None = None
     next_past_data_check: datetime | None = None
     completed_yesterday_date: date | None = None
-    last_successful_poll: datetime | None = None
+    last_poll: datetime | None = None

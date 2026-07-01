@@ -14,14 +14,15 @@
 Kirk Hill Coop is a HACS custom integration for importing generation, wind,
 and turbine data from the cooperative's read-only API into Home Assistant.
 
-The MVP provides UI setup, API-key validation, hourly updates, delayed
-whole-hour pulls, separate past-data checks after midnight, and Home Assistant
-sensor entities.
+The MVP provides UI setup, API-key validation, configurable live updates from
+`/api/v1/current`, delayed whole-hour pulls, separate past-data checks after
+midnight, and Home Assistant sensor entities.
 
 ## What You Get
 
 After installation, the integration creates sensors for:
 
+- `Current power`
 - `Generation today`
 - `Generation last hour`
 - `Generation yesterday`
@@ -40,7 +41,8 @@ If you set a presumed net saving rate in pence per kWh, it also creates:
 
 It also exposes diagnostic sensors for:
 
-- `Latest data` which is the last successful API poll time from Home Assistant
+- `Last poll` which is the last successful `/api/v1/current` poll time
+- `Next poll` which is when the next live `/api/v1/current` poll is due
 - `Next hourly check` which is when the delayed last-hour poll is due next
 - `Next past data check` which is when the delayed yesterday and monthly poll is due next
 
@@ -75,9 +77,14 @@ Then restart Home Assistant and add the integration from:
 
 ## Behaviour
 
-The integration requests the `today` range on a fixed hourly schedule. Home
-Assistant records sensor state changes and builds its own long-term statistics
-from the point the integration starts running.
+The integration requests `/api/v1/current` on a configurable live schedule of
+`5`, `10`, `15`, `30`, or `60` minutes. Each installation keeps using one
+stable delayed offset, and the live schedule is anchored to that same offset so
+it always lines up cleanly with the hourly archive poll.
+
+The integration also requests the `today` range on the delayed hourly schedule.
+Home Assistant records sensor state changes and builds its own long-term
+statistics from the point the integration starts running.
 
 Each installation also picks one stable delayed point between `:30` and `:59`
 past the hour. After that moment each hour, the integration fetches the most
@@ -97,10 +104,10 @@ to `site`.
 
 ## Architecture
 
-- `api.py` owns HTTP requests, authentication, and API error translation.
-- `history.py` owns delayed whole-hour window calculation in UK local time.
+- `api.py` owns endpoint naming, HTTP requests, authentication, and API error translation.
+- `history.py` owns delayed whole-hour and live aligned-schedule calculation in UK local time.
 - `models.py` owns typed data transferred between integration layers.
-- `coordinator.py` owns hourly `today` refreshes plus separate past-data polling state.
+- `coordinator.py` owns live current refreshes, hourly archive refreshes, and separate past-data polling state.
 - `config_flow.py` owns UI setup, API-key validation, and options.
 - `sensor.py` maps coordinator data to Home Assistant statistics-capable sensors.
 - `tests/` mirrors these responsibilities with isolated unit tests.
@@ -114,6 +121,7 @@ in Home Assistant. No YAML configuration or environment file will be required.
 | --- | --- | --- | --- |
 | API key | Yes | None | Setup cannot continue; the key is validated against the read-only API. |
 | Data scope | No | `owner` | Uses the API key holder's share rather than the whole site. |
+| Live refresh interval (minutes) | No | `15` | The integration refreshes `/api/v1/current` every 15 minutes using the stable delayed offset anchor. |
 | Presumed net saving rate (pence per kWh) | No | Empty | Savings sensors are not created with values until you provide a rate. |
 
 ## Before You Install
@@ -123,7 +131,7 @@ setup problem is in the integration rather than the API itself.
 
 The simplest quick check is a request like:
 
-`https://dashboard.kirkhillcoop.org/api/v1/summary?range=today`
+`https://dashboard.kirkhillcoop.org/api/v1/current`
 
 with header:
 

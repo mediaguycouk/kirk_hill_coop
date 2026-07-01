@@ -10,6 +10,13 @@ from aiohttp import ClientError, ClientSession
 from .const import API_BASE_URL, DEFAULT_SCOPE
 from .models import GenerationPoint, KirkHillSnapshot, WindSpeedPoint
 
+CURRENT_ENDPOINT = "current"
+SUMMARY_ENDPOINT = "summary"
+GENERATION_ENDPOINT = "generation"
+WIND_SPEED_ENDPOINT = "wind-speed"
+TURBINES_ENDPOINT = "turbines"
+USER_AGENT = "Kirk Hill Coop Home Assistant/0.3.0"
+
 
 # Identifies cooperative API failures without leaking transport details outward.
 # Human checked: No
@@ -33,6 +40,9 @@ class KirkHillResponseError(KirkHillApiError):
 # Human checked: No
 class KirkHillApiClient(Protocol):
     """Describes API operations required by setup and periodic refreshes."""
+
+    async def fetch_current_snapshot(self, scope: str) -> KirkHillSnapshot:
+        """Fetch the latest current-reading payload for one scope."""
 
     async def fetch_snapshot(self, requested_range: str, scope: str) -> KirkHillSnapshot:
         """Fetch all endpoint data for one range and scope."""
@@ -64,7 +74,7 @@ class KirkHillHttpClient:
         return {
             "Accept": "application/json",
             "Authorization": f"Bearer {self._api_key}",
-            "User-Agent": "Kirk Hill Coop Home Assistant/0.2.0",
+            "User-Agent": USER_AGENT,
         }
 
     # Omits the default owner scope because the live API already applies it implicitly.
@@ -85,6 +95,24 @@ class KirkHillHttpClient:
             params["from"] = from_utc.isoformat().replace("+00:00", "Z")
             params["to"] = to_utc.isoformat().replace("+00:00", "Z")
         return params
+
+    # Builds current-endpoint query parameters while still omitting the default owner scope.
+    # Human checked: No
+    def _current_request_params(self, scope: str) -> dict[str, str] | None:
+        if scope == DEFAULT_SCOPE:
+            return None
+        return {"scope": scope}
+
+    # Fetches the four endpoints concurrently because they describe one logical snapshot.
+    # Human checked: No
+    async def fetch_current_snapshot(self, scope: str) -> KirkHillSnapshot:
+        try:
+            current = await self._get(CURRENT_ENDPOINT, None, scope)
+            return self._parse_current_snapshot(current)
+        except KirkHillApiError:
+            raise
+        except (KeyError, TypeError, ValueError) as err:
+            raise KirkHillResponseError(f"Invalid Kirk Hill current response for scope={scope}: {err}") from err
 
     # Fetches the four endpoints concurrently because they describe one logical snapshot.
     # Human checked: No
@@ -107,10 +135,10 @@ class KirkHillHttpClient:
     ) -> KirkHillSnapshot:
         try:
             summary, generation, wind_speed, turbines = await asyncio.gather(
-                self._get("summary", requested_range, scope, from_utc, to_utc),
-                self._get("generation", requested_range, scope, from_utc, to_utc),
-                self._get("wind-speed", requested_range, scope, from_utc, to_utc),
-                self._get("turbines", requested_range, scope, from_utc, to_utc),
+                self._get(SUMMARY_ENDPOINT, requested_range, scope, from_utc, to_utc),
+                self._get(GENERATION_ENDPOINT, requested_range, scope, from_utc, to_utc),
+                self._get(WIND_SPEED_ENDPOINT, requested_range, scope, from_utc, to_utc),
+                self._get(TURBINES_ENDPOINT, requested_range, scope, from_utc, to_utc),
             )
             return self._parse_snapshot(summary, generation, wind_speed, turbines)
         except KirkHillApiError:
@@ -125,7 +153,7 @@ class KirkHillHttpClient:
     async def _get(
         self,
         endpoint: str,
-        requested_range: str,
+        requested_range: str | None,
         scope: str,
         from_utc: datetime | None = None,
         to_utc: datetime | None = None,
@@ -135,7 +163,11 @@ class KirkHillHttpClient:
             response = await self._session.get(
                 url,
                 headers=self._request_headers(),
-                params=self._request_params(requested_range, scope, from_utc, to_utc),
+                params=(
+                    self._request_params(requested_range, scope, from_utc, to_utc)
+                    if requested_range
+                    else self._current_request_params(scope)
+                ),
             )
             if response.status == 401:
                 raise KirkHillAuthenticationError("The Kirk Hill API key was rejected")
@@ -154,6 +186,30 @@ class KirkHillHttpClient:
         if not isinstance(payload, dict):
             raise KirkHillResponseError(f"Kirk Hill endpoint {endpoint} returned non-object JSON")
         return payload
+
+    # Converts API dictionaries into stable typed values consumed by storage and sensors.
+    # Human checked: No
+    @staticmethod
+    def _parse_current_snapshot(current_payload: dict[str, Any]) -> KirkHillSnapshot:
+        current_data = current_payload["data"]
+        reading = dict(current_data["reading"])
+        summary = dict(current_data["summary"])
+        turbines = tuple(dict(turbine) for turbine in current_data["turbines"])
+        _validate_optional_datetime(reading.get("generated_at"))
+        for key in ("latest_power_at", "latest_wind_speed_at", "latest_status_at"):
+            _validate_optional_datetime(summary.get(key))
+        for turbine in turbines:
+            for key in ("latest_power_at", "latest_wind_speed_at", "status_started_at", "state_started_at"):
+                _validate_optional_datetime(turbine.get(key))
+        return KirkHillSnapshot(
+            summary={},
+            generation=(),
+            wind_speed=(),
+            turbines=(),
+            current_reading=reading,
+            current_summary=summary,
+            current_turbines=turbines,
+        )
 
     # Converts API dictionaries into stable typed values consumed by storage and sensors.
     # Human checked: No
@@ -198,3 +254,11 @@ def _parse_datetime(value: str) -> datetime:
     if parsed.tzinfo is None:
         raise ValueError(f"API timestamp has no timezone: {value}")
     return parsed
+
+
+# Validates optional timestamp strings while preserving the original JSON shape for downstream consumers.
+# Human checked: No
+def _validate_optional_datetime(value: Any) -> None:
+    if value is None:
+        return
+    _parse_datetime(str(value))

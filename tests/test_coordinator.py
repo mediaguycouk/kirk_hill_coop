@@ -11,6 +11,7 @@ from custom_components.kirk_hill_coop.coordinator import KirkHillCoordinator
 from custom_components.kirk_hill_coop.history import (
     build_last_month_window,
     build_this_month_window,
+    next_live_check,
     next_hourly_check,
     next_past_data_check,
 )
@@ -43,13 +44,22 @@ class FakeApi:
     def __init__(
         self,
         *,
+        current_snapshot: KirkHillSnapshot | None = None,
         named_snapshots: dict[str, KirkHillSnapshot] | None = None,
         custom_snapshots: list[KirkHillSnapshot] | None = None,
     ) -> None:
+        self.current_calls = 0
         self.named_ranges: list[str] = []
         self.custom_windows: list[tuple[datetime, datetime]] = []
+        self._current_snapshot = current_snapshot or _current_snapshot()
         self._named_snapshots = named_snapshots or {"today": _today_snapshot(datetime(2026, 6, 30, 10, tzinfo=UTC))}
         self._custom_snapshots = list(custom_snapshots or [])
+
+    # Returns one stable current snapshot while recording the refresh count.
+    # Human checked: No
+    async def fetch_current_snapshot(self, scope: str) -> KirkHillSnapshot:
+        self.current_calls += 1
+        return self._current_snapshot
 
     # Returns one stable named-range snapshot.
     # Human checked: No
@@ -78,12 +88,14 @@ async def test_first_update_fetches_latest_eligible_hour_before_threshold() -> N
         time_provider=FakeTimeProvider(datetime(2026, 6, 30, 15, 20, tzinfo=UTC)),
         hourly_minute=42,
         hourly_second=30,
+        live_refresh_minutes=15,
         presumed_net_saving_rate_pence=None,
     )
     coordinator.data = _seed_snapshot(next_past_data_check_value=datetime(2026, 7, 1, 0, 42, 30, tzinfo=UTC))
 
     snapshot = await coordinator._async_update_data()
 
+    assert api.current_calls == 1
     assert api.named_ranges == ["today"]
     assert api.custom_windows == [
         (
@@ -93,9 +105,10 @@ async def test_first_update_fetches_latest_eligible_hour_before_threshold() -> N
     ]
     assert snapshot.last_hour_generation_kwh == 1
     assert snapshot.last_hour_window_end == datetime(2026, 6, 30, 14, 0, tzinfo=UTC)
+    assert snapshot.next_latest_check == datetime(2026, 6, 30, 15, 27, 30, tzinfo=UTC)
     assert snapshot.next_hourly_check == datetime(2026, 6, 30, 15, 42, 30, tzinfo=UTC)
     assert snapshot.next_past_data_check == datetime(2026, 7, 1, 0, 42, 30, tzinfo=UTC)
-    assert snapshot.last_successful_poll == datetime(2026, 6, 30, 15, 20, tzinfo=UTC)
+    assert snapshot.last_poll == datetime(2026, 6, 30, 15, 20, tzinfo=UTC)
     assert snapshot.summary["total_generation_kwh"] == 1
 
 
@@ -122,6 +135,7 @@ async def test_first_daytime_load_backfills_past_data_immediately() -> None:
         time_provider=FakeTimeProvider(now),
         hourly_minute=42,
         hourly_second=30,
+        live_refresh_minutes=15,
         presumed_net_saving_rate_pence=15.0,
     )
 
@@ -147,6 +161,7 @@ async def test_hourly_archive_uses_previous_whole_bst_hour() -> None:
         time_provider=FakeTimeProvider(datetime(2026, 6, 30, 15, 42, 30, tzinfo=UTC)),
         hourly_minute=42,
         hourly_second=30,
+        live_refresh_minutes=15,
         presumed_net_saving_rate_pence=None,
     )
     coordinator.data = _seed_snapshot(next_past_data_check_value=datetime(2026, 7, 1, 0, 42, 30, tzinfo=UTC))
@@ -174,6 +189,7 @@ async def test_hourly_archive_uses_previous_whole_gmt_hour() -> None:
         time_provider=FakeTimeProvider(datetime(2026, 1, 30, 12, 42, 30, tzinfo=UTC)),
         hourly_minute=42,
         hourly_second=30,
+        live_refresh_minutes=15,
         presumed_net_saving_rate_pence=None,
     )
     coordinator.data = _seed_snapshot(next_past_data_check_value=datetime(2026, 1, 31, 0, 42, 30, tzinfo=UTC))
@@ -191,6 +207,17 @@ async def test_hourly_archive_uses_previous_whole_gmt_hour() -> None:
 def test_next_hourly_check_rolls_to_next_gmt_hour() -> None:
     assert next_hourly_check(datetime(2026, 1, 30, 12, 42, 30, tzinfo=UTC), 42, 30) == datetime(
         2026, 1, 30, 13, 42, 30, tzinfo=UTC
+    )
+
+
+# Confirms live polling uses the hourly offset as its anchor so every cadence hits the hourly archive slot.
+# Human checked: No
+def test_next_live_check_uses_hourly_anchor() -> None:
+    assert next_live_check(datetime(2026, 1, 30, 12, 42, 30, tzinfo=UTC), 42, 30, 15) == datetime(
+        2026, 1, 30, 12, 57, 30, tzinfo=UTC
+    )
+    assert next_live_check(datetime(2026, 1, 30, 12, 41, 0, tzinfo=UTC), 42, 30, 15) == datetime(
+        2026, 1, 30, 12, 42, 30, tzinfo=UTC
     )
 
 
@@ -233,6 +260,7 @@ async def test_past_data_refresh_fetches_yesterday_and_months_once_complete() ->
         time_provider=FakeTimeProvider(now),
         hourly_minute=42,
         hourly_second=30,
+        live_refresh_minutes=15,
         presumed_net_saving_rate_pence=15.0,
     )
 
@@ -273,6 +301,7 @@ async def test_past_data_refresh_retries_hourly_when_yesterday_is_incomplete() -
         time_provider=FakeTimeProvider(now),
         hourly_minute=42,
         hourly_second=30,
+        live_refresh_minutes=15,
         presumed_net_saving_rate_pence=12.0,
     )
 
@@ -301,6 +330,7 @@ async def test_daytime_refreshes_do_not_refetch_past_data_when_not_due() -> None
         time_provider=FakeTimeProvider(now),
         hourly_minute=42,
         hourly_second=30,
+        live_refresh_minutes=15,
         presumed_net_saving_rate_pence=15.0,
     )
     coordinator.data = _seed_snapshot(
@@ -321,7 +351,40 @@ async def test_daytime_refreshes_do_not_refetch_past_data_when_not_due() -> None
     assert snapshot.next_past_data_check == datetime(2026, 6, 30, 23, 42, 30, tzinfo=UTC)
 
 
-# Confirms the real refresh is aligned to the advertised delayed-check time rather than one hour after the last poll.
+# Confirms live-only refreshes do not touch the archive endpoints before the hourly slot is due.
+# Human checked: No
+@pytest.mark.asyncio
+async def test_live_only_refresh_preserves_archive_data() -> None:
+    now = datetime(2026, 6, 30, 15, 27, 30, tzinfo=UTC)
+    api = FakeApi()
+    coordinator = KirkHillCoordinator(
+        hass=None,
+        api=api,
+        scope="owner",
+        time_provider=FakeTimeProvider(now),
+        hourly_minute=42,
+        hourly_second=30,
+        live_refresh_minutes=15,
+        presumed_net_saving_rate_pence=None,
+    )
+    coordinator.data = _seed_snapshot(
+        next_past_data_check_value=datetime(2026, 7, 1, 0, 42, 30, tzinfo=UTC),
+        next_latest_check_value=now,
+        next_hourly_check_value=datetime(2026, 6, 30, 15, 42, 30, tzinfo=UTC),
+    )
+
+    snapshot = await coordinator._async_update_data()
+
+    assert api.current_calls == 1
+    assert api.named_ranges == []
+    assert api.custom_windows == []
+    assert snapshot.summary["total_generation_kwh"] == 1
+    assert snapshot.last_poll == now
+    assert snapshot.next_latest_check == datetime(2026, 6, 30, 15, 42, 30, tzinfo=UTC)
+    assert snapshot.next_hourly_check == datetime(2026, 6, 30, 15, 42, 30, tzinfo=UTC)
+
+
+# Confirms the scheduler targets the earliest live-or-archive slot rather than drifting from startup time.
 # Human checked: No
 def test_schedule_refresh_targets_next_delayed_check(monkeypatch: pytest.MonkeyPatch) -> None:
     captured_when: list[datetime] = []
@@ -340,12 +403,13 @@ def test_schedule_refresh_targets_next_delayed_check(monkeypatch: pytest.MonkeyP
         time_provider=FakeTimeProvider(datetime(2026, 6, 30, 19, 12, tzinfo=UTC)),
         hourly_minute=53,
         hourly_second=0,
+        live_refresh_minutes=15,
         presumed_net_saving_rate_pence=None,
     )
 
     coordinator._schedule_refresh()
 
-    assert captured_when == [datetime(2026, 6, 30, 19, 53, tzinfo=UTC)]
+    assert captured_when == [datetime(2026, 6, 30, 19, 23, tzinfo=UTC)]
 
 
 # Builds a stable today-range snapshot for coordinator tests.
@@ -386,11 +450,33 @@ def _generation_total_snapshot(stamp: datetime, total_kwh: float) -> KirkHillSna
     )
 
 
+# Builds a stable current-endpoint snapshot for coordinator tests.
+# Human checked: No
+def _current_snapshot() -> KirkHillSnapshot:
+    return KirkHillSnapshot(
+        summary={},
+        generation=(),
+        wind_speed=(),
+        turbines=(),
+        current_reading={"generated_at": "2026-06-30T10:00:00Z", "source_interval": "1m", "complete": True},
+        current_summary={
+            "total_power_kw": 0.202,
+            "wind_speed_mps": 4.96,
+            "capacity_factor_percent": 9.47,
+            "active_turbines": 8,
+            "site_capacity_watts": 18_800_000,
+        },
+        current_turbines=({"id": "T1"},),
+    )
+
+
 # Seeds a previous snapshot so tests can exercise refreshes without retriggering past-data fetches.
 # Human checked: No
 def _seed_snapshot(
     *,
     next_past_data_check_value: datetime,
+    next_latest_check_value: datetime | None = None,
+    next_hourly_check_value: datetime | None = None,
     generation_yesterday_kwh: float | None = None,
     generation_this_month_kwh: float | None = None,
     generation_last_month_kwh: float | None = None,
@@ -402,7 +488,11 @@ def _seed_snapshot(
         generation=(GenerationPoint(stamp, 1),),
         wind_speed=(WindSpeedPoint(stamp, 8),),
         turbines=(),
+        current_reading={"generated_at": "2026-06-30T10:00:00Z", "source_interval": "1m", "complete": True},
+        current_summary={"total_power_kw": 0.202, "wind_speed_mps": 4.96, "active_turbines": 8, "site_capacity_watts": 18_800_000},
         next_past_data_check=next_past_data_check_value,
+        next_latest_check=next_latest_check_value,
+        next_hourly_check=next_hourly_check_value,
         generation_yesterday_kwh=generation_yesterday_kwh,
         generation_this_month_kwh=generation_this_month_kwh,
         generation_last_month_kwh=generation_last_month_kwh,

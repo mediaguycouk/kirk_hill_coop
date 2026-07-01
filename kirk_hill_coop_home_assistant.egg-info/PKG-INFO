@@ -1,9 +1,9 @@
 Metadata-Version: 2.4
 Name: kirk-hill-coop-home-assistant
-Version: 0.0.0
+Version: 0.3.0
 Summary: Kirk Hill Coop custom integration for Home Assistant
-Requires-Python: >=3.13
+Requires-Python: >=3.12
 Provides-Extra: test
 Requires-Dist: pytest>=8.3; extra == "test"
-Requires-Dist: pytest-asyncio>=0.25; extra == "test"
-Requires-Dist: pytest-homeassistant-custom-component>=0.13.210; extra == "test"
+Requires-Dist: pytest-asyncio>=0.24; extra == "test"
+Requires-Dist: pytest-homeassistant-custom-component>=0.13.205; extra == "test"

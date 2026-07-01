@@ -23,6 +23,14 @@ from .coordinator import KirkHillCoordinator
 
 SENSORS = (
     SensorEntityDescription(
+        key="total_power_kw",
+        translation_key="current_power",
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=3,
+    ),
+    SensorEntityDescription(
         key="total_generation_kwh",
         translation_key="generation_today",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
@@ -104,8 +112,14 @@ SENSORS = (
         suggested_display_precision=2,
     ),
     SensorEntityDescription(
-        key="latest_generation_interval_end",
-        translation_key="latest_data",
+        key="last_poll",
+        translation_key="last_poll",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key="next_latest_check",
+        translation_key="next_latest_check",
         device_class=SensorDeviceClass.TIMESTAMP,
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
@@ -165,15 +179,19 @@ class KirkHillSensor(CoordinatorEntity[KirkHillCoordinator], SensorEntity):
     def native_value(self) -> Any:
         key = self.entity_description.key
         if key == "wind_speed_mps":
-            return self.coordinator.data.wind_speed[-1].wind_speed_mps if self.coordinator.data.wind_speed else None
+            return (self.coordinator.data.current_summary or {}).get("wind_speed_mps")
+        if key == "total_power_kw":
+            return (self.coordinator.data.current_summary or {}).get("total_power_kw")
         if key == "last_hour_generation_kwh":
             return self.coordinator.data.last_hour_generation_kwh
+        if key == "next_latest_check":
+            return self.coordinator.data.next_latest_check
         if key == "next_hourly_check":
             return self.coordinator.data.next_hourly_check
         if key == "next_past_data_check":
             return self.coordinator.data.next_past_data_check
-        if key == "latest_generation_interval_end":
-            return self.coordinator.data.last_successful_poll
+        if key == "last_poll":
+            return self.coordinator.data.last_poll
         if key == "generation_yesterday_kwh":
             return self.coordinator.data.generation_yesterday_kwh
         if key == "generation_this_month_kwh":
@@ -187,7 +205,13 @@ class KirkHillSensor(CoordinatorEntity[KirkHillCoordinator], SensorEntity):
         if key == "savings_last_month_pence":
             return _pence_to_pounds(self.coordinator.data.savings_last_month_pence)
         if key == "site_capacity_watts":
-            return _watts_to_megawatts(self.coordinator.data.summary.get(key))
+            current_value = (self.coordinator.data.current_summary or {}).get(key)
+            if current_value is None:
+                current_value = self.coordinator.data.summary.get(key)
+            return _watts_to_megawatts(current_value)
+        current_summary = self.coordinator.data.current_summary or {}
+        if key in {"capacity_factor_percent", "active_turbines"}:
+            return current_summary.get(key)
         value = self.coordinator.data.summary.get(key)
         return value
 
@@ -199,6 +223,15 @@ class KirkHillSensor(CoordinatorEntity[KirkHillCoordinator], SensorEntity):
             return {
                 "scope": self.coordinator.scope,
                 "window_end": self.coordinator.data.last_hour_window_end,
+            }
+        if self.entity_description.key == "total_power_kw":
+            current_reading = self.coordinator.data.current_reading or {}
+            return {
+                "scope": self.coordinator.scope,
+                "generated_at": current_reading.get("generated_at"),
+                "source_interval": current_reading.get("source_interval"),
+                "complete": current_reading.get("complete"),
+                "turbines": list(self.coordinator.data.current_turbines),
             }
         if self.entity_description.key != "total_generation_kwh":
             return None

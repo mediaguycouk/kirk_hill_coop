@@ -17,10 +17,13 @@ from homeassistant.helpers.selector import TextSelector, TextSelectorConfig
 from .api import KirkHillApiError, KirkHillAuthenticationError, KirkHillHttpClient
 from .const import (
     CONF_API_KEY,
+    CONF_LIVE_REFRESH_MINUTES,
     CONF_PRESUMED_NET_SAVING_RATE_PENCE,
     CONF_SCOPE,
+    DEFAULT_LIVE_REFRESH_MINUTES,
     DEFAULT_SCOPE,
     DOMAIN,
+    VALID_LIVE_REFRESH_MINUTES,
     VALID_SCOPES,
 )
 
@@ -41,6 +44,21 @@ def _format_savings_rate(value: float | str) -> str:
     return str(value)
 
 
+# Parses the live refresh selection into a supported integer minute value.
+# Human checked: No
+def _parse_live_refresh_minutes(value: Any) -> int:
+    parsed = int(value)
+    if parsed not in VALID_LIVE_REFRESH_MINUTES:
+        raise ValueError("Unsupported live refresh interval")
+    return parsed
+
+
+# Formats the saved live refresh interval back into the string shape Home Assistant radio inputs submit.
+# Human checked: No
+def _format_live_refresh_minutes(value: int | str) -> str:
+    return str(value)
+
+
 # Collects and validates a read-only Kirk Hill API key through Home Assistant's UI.
 # Human checked: No
 class KirkHillConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -55,11 +73,15 @@ class KirkHillConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 await self._validate_api_key(user_input[CONF_API_KEY], user_input[CONF_SCOPE])
+                live_refresh_minutes = _parse_live_refresh_minutes(user_input.get(CONF_LIVE_REFRESH_MINUTES, 15))
                 presumed_net_saving_rate_pence = _parse_savings_rate(
                     user_input.get(CONF_PRESUMED_NET_SAVING_RATE_PENCE, "")
                 )
-            except ValueError:
-                errors[CONF_PRESUMED_NET_SAVING_RATE_PENCE] = "invalid_savings_rate"
+            except ValueError as err:
+                if "Unsupported live refresh interval" in str(err):
+                    errors[CONF_LIVE_REFRESH_MINUTES] = "invalid_live_refresh_minutes"
+                else:
+                    errors[CONF_PRESUMED_NET_SAVING_RATE_PENCE] = "invalid_savings_rate"
             except KirkHillAuthenticationError:
                 errors["base"] = "invalid_auth"
             except KirkHillApiError:
@@ -70,6 +92,7 @@ class KirkHillConfigFlow(ConfigFlow, domain=DOMAIN):
                 cleaned = {
                     CONF_API_KEY: user_input[CONF_API_KEY],
                     CONF_SCOPE: user_input[CONF_SCOPE],
+                    CONF_LIVE_REFRESH_MINUTES: live_refresh_minutes,
                 }
                 if presumed_net_saving_rate_pence is not None:
                     cleaned[CONF_PRESUMED_NET_SAVING_RATE_PENCE] = presumed_net_saving_rate_pence
@@ -87,11 +110,15 @@ class KirkHillConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 await self._validate_api_key(user_input[CONF_API_KEY], user_input[CONF_SCOPE])
+                live_refresh_minutes = _parse_live_refresh_minutes(user_input.get(CONF_LIVE_REFRESH_MINUTES, 15))
                 presumed_net_saving_rate_pence = _parse_savings_rate(
                     user_input.get(CONF_PRESUMED_NET_SAVING_RATE_PENCE, "")
                 )
-            except ValueError:
-                errors[CONF_PRESUMED_NET_SAVING_RATE_PENCE] = "invalid_savings_rate"
+            except ValueError as err:
+                if "Unsupported live refresh interval" in str(err):
+                    errors[CONF_LIVE_REFRESH_MINUTES] = "invalid_live_refresh_minutes"
+                else:
+                    errors[CONF_PRESUMED_NET_SAVING_RATE_PENCE] = "invalid_savings_rate"
             except KirkHillAuthenticationError:
                 errors["base"] = "invalid_auth"
             except KirkHillApiError:
@@ -99,6 +126,7 @@ class KirkHillConfigFlow(ConfigFlow, domain=DOMAIN):
             else:
                 options = {
                     CONF_SCOPE: user_input[CONF_SCOPE],
+                    CONF_LIVE_REFRESH_MINUTES: live_refresh_minutes,
                 }
                 if presumed_net_saving_rate_pence is not None:
                     options[CONF_PRESUMED_NET_SAVING_RATE_PENCE] = presumed_net_saving_rate_pence
@@ -118,6 +146,7 @@ class KirkHillConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=self._build_reconfigure_schema(
                 api_key=current.get(CONF_API_KEY, ""),
                 scope=current.get(CONF_SCOPE, DEFAULT_SCOPE),
+                live_refresh_minutes=current.get(CONF_LIVE_REFRESH_MINUTES, DEFAULT_LIVE_REFRESH_MINUTES),
                 presumed_net_saving_rate_pence=current.get(CONF_PRESUMED_NET_SAVING_RATE_PENCE, ""),
             ),
             errors=errors,
@@ -130,12 +159,19 @@ class KirkHillConfigFlow(ConfigFlow, domain=DOMAIN):
         *,
         api_key: str = "",
         scope: str = DEFAULT_SCOPE,
+        live_refresh_minutes: int = DEFAULT_LIVE_REFRESH_MINUTES,
         presumed_net_saving_rate_pence: float | str = "",
     ) -> vol.Schema:
         return vol.Schema(
             {
                 vol.Required(CONF_API_KEY, default=api_key): str,
                 vol.Required(CONF_SCOPE, default=scope): vol.In(VALID_SCOPES),
+                vol.Required(
+                    CONF_LIVE_REFRESH_MINUTES,
+                    default=_format_live_refresh_minutes(live_refresh_minutes),
+                ): vol.In(
+                    tuple(_format_live_refresh_minutes(option) for option in VALID_LIVE_REFRESH_MINUTES)
+                ),
                 vol.Optional(
                     CONF_PRESUMED_NET_SAVING_RATE_PENCE,
                     default=_format_savings_rate(presumed_net_saving_rate_pence),
@@ -143,11 +179,11 @@ class KirkHillConfigFlow(ConfigFlow, domain=DOMAIN):
             }
         )
 
-    # Validates credentials with the same lightweight today request used during initial setup.
+    # Validates credentials with the current endpoint so setup exercises the lighter live-reading path.
     # Human checked: No
     async def _validate_api_key(self, api_key: str, scope: str) -> None:
         client = KirkHillHttpClient(async_get_clientsession(self.hass), api_key)
-        await client.fetch_snapshot("today", scope)
+        await client.fetch_current_snapshot(scope)
 
     # Exposes editable non-secret settings from the integration page.
     # Human checked: No
@@ -173,14 +209,19 @@ class KirkHillOptionsFlow(OptionsFlow):
         errors: dict[str, str] = {}
         if user_input is not None:
             try:
+                live_refresh_minutes = _parse_live_refresh_minutes(user_input.get(CONF_LIVE_REFRESH_MINUTES, 15))
                 presumed_net_saving_rate_pence = _parse_savings_rate(
                     user_input.get(CONF_PRESUMED_NET_SAVING_RATE_PENCE, "")
                 )
-            except ValueError:
-                errors[CONF_PRESUMED_NET_SAVING_RATE_PENCE] = "invalid_savings_rate"
+            except ValueError as err:
+                if "Unsupported live refresh interval" in str(err):
+                    errors[CONF_LIVE_REFRESH_MINUTES] = "invalid_live_refresh_minutes"
+                else:
+                    errors[CONF_PRESUMED_NET_SAVING_RATE_PENCE] = "invalid_savings_rate"
             else:
                 cleaned = {
                     CONF_SCOPE: user_input[CONF_SCOPE],
+                    CONF_LIVE_REFRESH_MINUTES: live_refresh_minutes,
                 }
                 if presumed_net_saving_rate_pence is not None:
                     cleaned[CONF_PRESUMED_NET_SAVING_RATE_PENCE] = presumed_net_saving_rate_pence
@@ -189,6 +230,12 @@ class KirkHillOptionsFlow(OptionsFlow):
         schema = vol.Schema(
             {
                 vol.Required(CONF_SCOPE, default=current.get(CONF_SCOPE, DEFAULT_SCOPE)): vol.In(VALID_SCOPES),
+                vol.Required(
+                    CONF_LIVE_REFRESH_MINUTES,
+                    default=_format_live_refresh_minutes(
+                        current.get(CONF_LIVE_REFRESH_MINUTES, DEFAULT_LIVE_REFRESH_MINUTES)
+                    ),
+                ): vol.In(tuple(_format_live_refresh_minutes(option) for option in VALID_LIVE_REFRESH_MINUTES)),
                 vol.Optional(
                     CONF_PRESUMED_NET_SAVING_RATE_PENCE,
                     default=_format_savings_rate(current.get(CONF_PRESUMED_NET_SAVING_RATE_PENCE, "")),

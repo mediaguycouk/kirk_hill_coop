@@ -1,6 +1,7 @@
 # Coordinates today-range and delayed last-hour refreshes for all entities.
 # Human checked: No
 
+import asyncio
 import logging
 from datetime import datetime
 
@@ -18,6 +19,7 @@ from .history import (
     delayed_check_for_local_date,
     expected_yesterday_date,
     expected_yesterday_end_utc,
+    next_live_check,
     next_hourly_check,
     next_past_data_check,
 )
@@ -42,6 +44,7 @@ class KirkHillCoordinator(DataUpdateCoordinator[KirkHillSnapshot]):
         time_provider: TimeProvider,
         hourly_minute: int,
         hourly_second: int,
+        live_refresh_minutes: int,
         presumed_net_saving_rate_pence: float | None,
     ) -> None:
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=None)
@@ -50,6 +53,7 @@ class KirkHillCoordinator(DataUpdateCoordinator[KirkHillSnapshot]):
         self.scope = scope
         self._hourly_minute = hourly_minute
         self._hourly_second = hourly_second
+        self._live_refresh_minutes = live_refresh_minutes
         self._presumed_net_saving_rate_pence = presumed_net_saving_rate_pence
         self._last_hour_window_key: str | None = None
 
@@ -61,10 +65,19 @@ class KirkHillCoordinator(DataUpdateCoordinator[KirkHillSnapshot]):
             return
 
         self._async_unsub_refresh()
-        scheduled_check = next_hourly_check(
-            self._time_provider.now(),
-            self._hourly_minute,
-            self._hourly_second,
+        now = self._time_provider.now()
+        scheduled_check = min(
+            next_live_check(
+                now,
+                self._hourly_minute,
+                self._hourly_second,
+                self._live_refresh_minutes,
+            ),
+            next_hourly_check(
+                now,
+                self._hourly_minute,
+                self._hourly_second,
+            ),
         )
         self._unsub_refresh = async_track_point_in_utc_time(
             self.hass,
@@ -77,17 +90,124 @@ class KirkHillCoordinator(DataUpdateCoordinator[KirkHillSnapshot]):
     async def _async_update_data(self) -> KirkHillSnapshot:
         try:
             now = self._time_provider.now()
-            today = await self._api.fetch_snapshot(RUNTIME_RANGE, self.scope)
-            with_last_hour = await self._with_last_hour_data(now, today)
-            return await self._with_past_data(now, with_last_hour)
+            refresh_live = self.data is None or self.data.next_latest_check is None or now >= self.data.next_latest_check
+            refresh_archive = self.data is None or self.data.next_hourly_check is None or now >= self.data.next_hourly_check
+            if refresh_live and refresh_archive:
+                return await self._refresh_live_and_archive(now)
+            if refresh_live:
+                return await self._refresh_live_only(now)
+            if refresh_archive:
+                return await self._refresh_archive_only(now)
+            return self._rebuild_snapshot(
+                self.data,
+                next_latest_check_value=next_live_check(
+                    now,
+                    self._hourly_minute,
+                    self._hourly_second,
+                    self._live_refresh_minutes,
+                ),
+                next_hourly_check_value=next_hourly_check(now, self._hourly_minute, self._hourly_second),
+            )
         except KirkHillApiError as err:
             raise UpdateFailed(f"Unable to update Kirk Hill data for scope={self.scope}: {err}") from err
 
+    # Refreshes live and archive data together so aligned slots publish one coherent snapshot.
+    # Human checked: No
+    async def _refresh_live_and_archive(self, now: datetime) -> KirkHillSnapshot:
+        current, today = await asyncio.gather(
+            self._api.fetch_current_snapshot(self.scope),
+            self._api.fetch_snapshot(RUNTIME_RANGE, self.scope),
+        )
+        with_current = self._merge_current_data(now, current, self.data)
+        with_archive = await self._with_archive_data(now, today, with_current)
+        return self._rebuild_snapshot(
+            with_archive,
+            next_latest_check_value=next_live_check(
+                now,
+                self._hourly_minute,
+                self._hourly_second,
+                self._live_refresh_minutes,
+            ),
+            next_hourly_check_value=next_hourly_check(now, self._hourly_minute, self._hourly_second),
+        )
+
+    # Refreshes only the live current endpoint while preserving archive-derived totals and windows.
+    # Human checked: No
+    async def _refresh_live_only(self, now: datetime) -> KirkHillSnapshot:
+        current = await self._api.fetch_current_snapshot(self.scope)
+        merged = self._merge_current_data(now, current, self.data)
+        return self._rebuild_snapshot(
+            merged,
+            next_latest_check_value=next_live_check(
+                now,
+                self._hourly_minute,
+                self._hourly_second,
+                self._live_refresh_minutes,
+            ),
+            next_hourly_check_value=self.data.next_hourly_check if self.data else None,
+        )
+
+    # Refreshes only the archive endpoints while preserving the last live current readings.
+    # Human checked: No
+    async def _refresh_archive_only(self, now: datetime) -> KirkHillSnapshot:
+        today = await self._api.fetch_snapshot(RUNTIME_RANGE, self.scope)
+        baseline = self._copy_snapshot(self.data)
+        with_archive = await self._with_archive_data(now, today, baseline)
+        return self._rebuild_snapshot(
+            with_archive,
+            next_latest_check_value=self.data.next_latest_check if self.data else None,
+            next_hourly_check_value=next_hourly_check(now, self._hourly_minute, self._hourly_second),
+        )
+
+    # Merges live endpoint data into the current snapshot while keeping archive values intact.
+    # Human checked: No
+    def _merge_current_data(
+        self,
+        now: datetime,
+        current: KirkHillSnapshot,
+        previous: KirkHillSnapshot | None,
+    ) -> KirkHillSnapshot:
+        base = self._copy_snapshot(previous)
+        return KirkHillSnapshot(
+            summary=base.summary,
+            generation=base.generation,
+            wind_speed=base.wind_speed,
+            turbines=base.turbines,
+            current_reading=current.current_reading,
+            current_summary=current.current_summary,
+            current_turbines=current.current_turbines,
+            bucket=base.bucket,
+            last_hour_generation_kwh=base.last_hour_generation_kwh,
+            last_hour_window_end=base.last_hour_window_end,
+            generation_yesterday_kwh=base.generation_yesterday_kwh,
+            generation_this_month_kwh=base.generation_this_month_kwh,
+            generation_last_month_kwh=base.generation_last_month_kwh,
+            savings_yesterday_pence=base.savings_yesterday_pence,
+            savings_this_month_pence=base.savings_this_month_pence,
+            savings_last_month_pence=base.savings_last_month_pence,
+            next_latest_check=base.next_latest_check,
+            next_hourly_check=base.next_hourly_check,
+            next_past_data_check=base.next_past_data_check,
+            completed_yesterday_date=base.completed_yesterday_date,
+            last_poll=now,
+        )
+
+    # Adds delayed hourly and past-data archive values onto an existing live or preserved baseline snapshot.
+    # Human checked: No
+    async def _with_archive_data(
+        self,
+        now: datetime,
+        today: KirkHillSnapshot,
+        current: KirkHillSnapshot,
+    ) -> KirkHillSnapshot:
+        with_last_hour = await self._with_last_hour_data(now, today, current)
+        return await self._with_past_data(now, with_last_hour)
+
     # Adds the latest eligible complete hour and catches up gracefully after restarts or reloads.
     # Human checked: No
-    async def _with_last_hour_data(self, now, today: KirkHillSnapshot) -> KirkHillSnapshot:
-        last_hour_generation = self.data.last_hour_generation_kwh if self.data else None
-        last_hour_window_end = self.data.last_hour_window_end if self.data else None
+    async def _with_last_hour_data(self, now: datetime, today: KirkHillSnapshot, current: KirkHillSnapshot) -> KirkHillSnapshot:
+        last_hour_generation = current.last_hour_generation_kwh
+        last_hour_window_end = current.last_hour_window_end
         scheduled_check = next_hourly_check(now, self._hourly_minute, self._hourly_second)
         window = build_latest_eligible_hour_window(now, self._hourly_minute, self._hourly_second)
         if self._last_hour_window_key != window.key:
@@ -101,11 +221,23 @@ class KirkHillCoordinator(DataUpdateCoordinator[KirkHillSnapshot]):
             generation=today.generation,
             wind_speed=today.wind_speed,
             turbines=today.turbines,
+            current_reading=current.current_reading,
+            current_summary=current.current_summary,
+            current_turbines=current.current_turbines,
             bucket=today.bucket,
             last_hour_generation_kwh=last_hour_generation,
             last_hour_window_end=last_hour_window_end,
+            generation_yesterday_kwh=current.generation_yesterday_kwh,
+            generation_this_month_kwh=current.generation_this_month_kwh,
+            generation_last_month_kwh=current.generation_last_month_kwh,
+            savings_yesterday_pence=current.savings_yesterday_pence,
+            savings_this_month_pence=current.savings_this_month_pence,
+            savings_last_month_pence=current.savings_last_month_pence,
+            next_latest_check=current.next_latest_check,
             next_hourly_check=scheduled_check,
-            last_successful_poll=now,
+            next_past_data_check=current.next_past_data_check,
+            completed_yesterday_date=current.completed_yesterday_date,
+            last_poll=current.last_poll,
         )
 
     # Adds yesterday and monthly values only when the separate post-midnight schedule or retry schedule is due.
@@ -183,6 +315,9 @@ class KirkHillCoordinator(DataUpdateCoordinator[KirkHillSnapshot]):
             generation=current.generation,
             wind_speed=current.wind_speed,
             turbines=current.turbines,
+            current_reading=current.current_reading,
+            current_summary=current.current_summary,
+            current_turbines=current.current_turbines,
             bucket=current.bucket,
             last_hour_generation_kwh=current.last_hour_generation_kwh,
             last_hour_window_end=current.last_hour_window_end,
@@ -192,10 +327,11 @@ class KirkHillCoordinator(DataUpdateCoordinator[KirkHillSnapshot]):
             savings_yesterday_pence=savings_yesterday_pence,
             savings_this_month_pence=savings_this_month_pence,
             savings_last_month_pence=savings_last_month_pence,
+            next_latest_check=current.next_latest_check,
             next_hourly_check=current.next_hourly_check,
             next_past_data_check=next_past_data_check_value,
             completed_yesterday_date=completed_value,
-            last_successful_poll=current.last_successful_poll,
+            last_poll=current.last_poll,
         )
 
     # Fetches the month-to-date and previous-month totals using explicit UK-local calendar boundaries.
@@ -246,3 +382,43 @@ class KirkHillCoordinator(DataUpdateCoordinator[KirkHillSnapshot]):
         if self._presumed_net_saving_rate_pence is None or generation_kwh is None:
             return None
         return generation_kwh * self._presumed_net_saving_rate_pence
+
+    # Rebuilds one snapshot while overriding only the next-check timestamps that changed this cycle.
+    # Human checked: No
+    def _rebuild_snapshot(
+        self,
+        current: KirkHillSnapshot,
+        *,
+        next_latest_check_value: datetime | None,
+        next_hourly_check_value: datetime | None,
+    ) -> KirkHillSnapshot:
+        return KirkHillSnapshot(
+            summary=current.summary,
+            generation=current.generation,
+            wind_speed=current.wind_speed,
+            turbines=current.turbines,
+            current_reading=current.current_reading,
+            current_summary=current.current_summary,
+            current_turbines=current.current_turbines,
+            bucket=current.bucket,
+            last_hour_generation_kwh=current.last_hour_generation_kwh,
+            last_hour_window_end=current.last_hour_window_end,
+            generation_yesterday_kwh=current.generation_yesterday_kwh,
+            generation_this_month_kwh=current.generation_this_month_kwh,
+            generation_last_month_kwh=current.generation_last_month_kwh,
+            savings_yesterday_pence=current.savings_yesterday_pence,
+            savings_this_month_pence=current.savings_this_month_pence,
+            savings_last_month_pence=current.savings_last_month_pence,
+            next_latest_check=next_latest_check_value,
+            next_hourly_check=next_hourly_check_value,
+            next_past_data_check=current.next_past_data_check,
+            completed_yesterday_date=current.completed_yesterday_date,
+            last_poll=current.last_poll,
+        )
+
+    # Creates an empty-but-valid snapshot when live or archive merging needs a baseline before first refresh.
+    # Human checked: No
+    def _copy_snapshot(self, snapshot: KirkHillSnapshot | None) -> KirkHillSnapshot:
+        if snapshot is not None:
+            return snapshot
+        return KirkHillSnapshot(summary={}, generation=(), wind_speed=(), turbines=())
