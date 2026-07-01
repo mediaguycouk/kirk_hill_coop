@@ -3,12 +3,6 @@
 # Kirk Hill Coop for Home Assistant
 
 > [!WARNING]
-> This project is not production ready yet.
-> It is an in-progress custom integration for testing and iteration, and it may
-> change shape, miss edge cases, or break between updates. 
-> 
-> Use it only if you are happy to test, troubleshoot, and accept rough edges.
->
 > This is not an official application from the Kirk Hill Coop
 
 Kirk Hill Coop is a HACS custom integration for importing generation, wind,
@@ -42,7 +36,7 @@ If you set a presumed net saving rate in pence per kWh, it also creates:
 It also exposes diagnostic sensors for:
 
 - `Last poll` which is the last successful `/api/v1/current` poll time
-- `Next poll` which is when the next live `/api/v1/current` poll is due
+- `Next latest check` which is when the next live `/api/v1/current` poll is due
 - `Next hourly check` which is when the delayed last-hour poll is due next
 - `Next past data check` which is when the delayed yesterday and monthly poll is due next
 
