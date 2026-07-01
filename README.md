@@ -57,7 +57,9 @@ It also exposes diagnostic sensors for:
 9. Go to `Settings -> Devices & services`.
 10. Choose `Add integration`.
 11. Search for `Kirk Hill Coop`.
-12. Paste your read-only API key and finish setup.
+12. Paste your read-only API key
+13. Enter the current savings rate. I think from the emails that is 8.074 (p/kWh)
+14. finish setup.
 
 ## Manual Installation
 
