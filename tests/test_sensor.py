@@ -61,15 +61,26 @@ def test_savings_sensors_expose_calculated_pence_values() -> None:
     assert _sensor("savings_last_month_pence", coordinator, entry).native_value == 67.5
 
 
-# Confirms site capacity is surfaced in megawatts rather than raw watts.
+# Confirms capacity is surfaced in kilowatts rather than raw watts.
 # Human checked: No
-def test_site_capacity_sensor_uses_megawatts() -> None:
+def test_capacity_sensor_uses_kilowatts() -> None:
     coordinator = Mock()
     coordinator.scope = "owner"
-    coordinator.data = _snapshot(site_capacity_watts=18_800_000)
+    coordinator.data = _snapshot(capacity_watts=18_800_000)
     entry = Mock(entry_id="entry-1")
 
-    assert _sensor("site_capacity_watts", coordinator, entry).native_value == 18.8
+    assert _sensor("capacity_watts", coordinator, entry).native_value == 18_800
+
+
+# Confirms smaller owner-scoped capacity values keep useful precision instead of rounding to zero.
+# Human checked: No
+def test_capacity_sensor_keeps_small_owner_values_visible() -> None:
+    coordinator = Mock()
+    coordinator.scope = "owner"
+    coordinator.data = _snapshot(capacity_watts=2_132.97)
+    entry = Mock(entry_id="entry-1")
+
+    assert _sensor("capacity_watts", coordinator, entry).native_value == pytest.approx(2.13297)
 
 
 # Confirms live diagnostics and current power sensors read from the current-endpoint fields.
@@ -83,7 +94,7 @@ def test_live_sensors_use_current_payload_fields() -> None:
             "wind_speed_mps": 4.96,
             "capacity_factor_percent": 9.47,
             "active_turbines": 8,
-            "site_capacity_watts": 18_800_000,
+            "capacity_watts": 18_800_000,
         },
         current_reading={"generated_at": "2026-07-01T13:31:11Z", "source_interval": "1m", "complete": True},
         next_latest_check=datetime(2026, 7, 1, 13, 42, 30, tzinfo=UTC),
@@ -110,7 +121,7 @@ def test_energy_total_sensors_use_total_state_class() -> None:
     assert _description("generation_last_month_kwh").state_class == "total"
     assert _description("savings_yesterday_pence").native_unit_of_measurement == "GBP"
     assert _description("savings_yesterday_pence").suggested_display_precision == 2
-    assert _description("site_capacity_watts").native_unit_of_measurement == "MW"
+    assert _description("capacity_watts").native_unit_of_measurement == "kW"
 
 
 # Builds one concrete sensor using the production entity descriptions so tests stay aligned with setup wiring.
@@ -136,7 +147,7 @@ def _snapshot(
     savings_yesterday_pence: float | None = None,
     savings_this_month_pence: float | None = None,
     savings_last_month_pence: float | None = None,
-    site_capacity_watts: int | None = None,
+    capacity_watts: float | None = None,
     current_summary: dict | None = None,
     current_reading: dict | None = None,
     next_latest_check: datetime | None = None,
@@ -145,7 +156,7 @@ def _snapshot(
 ) -> KirkHillSnapshot:
     stamp = datetime(2026, 6, 30, 10, tzinfo=UTC)
     return KirkHillSnapshot(
-        summary={"total_generation_kwh": 1, "site_capacity_watts": site_capacity_watts},
+        summary={"total_generation_kwh": 1, "capacity_watts": capacity_watts},
         generation=(GenerationPoint(stamp, 1),),
         wind_speed=(WindSpeedPoint(stamp, 8),),
         turbines=(),

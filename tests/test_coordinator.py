@@ -464,7 +464,7 @@ def _current_snapshot() -> KirkHillSnapshot:
             "wind_speed_mps": 4.96,
             "capacity_factor_percent": 9.47,
             "active_turbines": 8,
-            "site_capacity_watts": 18_800_000,
+            "capacity_watts": 18_800_000,
         },
         current_turbines=({"id": "T1"},),
     )
@@ -489,7 +489,7 @@ def _seed_snapshot(
         wind_speed=(WindSpeedPoint(stamp, 8),),
         turbines=(),
         current_reading={"generated_at": "2026-06-30T10:00:00Z", "source_interval": "1m", "complete": True},
-        current_summary={"total_power_kw": 0.202, "wind_speed_mps": 4.96, "active_turbines": 8, "site_capacity_watts": 18_800_000},
+        current_summary={"total_power_kw": 0.202, "wind_speed_mps": 4.96, "active_turbines": 8, "capacity_watts": 18_800_000},
         next_past_data_check=next_past_data_check_value,
         next_latest_check=next_latest_check_value,
         next_hourly_check=next_hourly_check_value,

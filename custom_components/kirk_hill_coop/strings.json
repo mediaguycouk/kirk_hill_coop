@@ -57,7 +57,7 @@
     "wind_speed": {"name": "Wind speed"},
     "capacity_factor": {"name": "Capacity factor"},
     "active_turbines": {"name": "Active turbines"},
-    "site_capacity": {"name": "Site capacity"},
+    "capacity": {"name": "Capacity"},
     "last_poll": {"name": "Last poll"},
     "next_latest_check": {"name": "Next poll"},
     "next_hourly_check": {"name": "Next hourly check"},

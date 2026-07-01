@@ -15,7 +15,7 @@ SUMMARY_ENDPOINT = "summary"
 GENERATION_ENDPOINT = "generation"
 WIND_SPEED_ENDPOINT = "wind-speed"
 TURBINES_ENDPOINT = "turbines"
-USER_AGENT = "Kirk Hill Coop Home Assistant/0.3.0"
+USER_AGENT = "Kirk Hill Coop Home Assistant/1.1.0"
 
 
 # Identifies cooperative API failures without leaking transport details outward.

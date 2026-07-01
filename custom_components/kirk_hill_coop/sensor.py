@@ -104,9 +104,9 @@ SENSORS = (
     ),
     SensorEntityDescription(key="active_turbines", translation_key="active_turbines"),
     SensorEntityDescription(
-        key="site_capacity_watts",
-        translation_key="site_capacity",
-        native_unit_of_measurement=UnitOfPower.MEGA_WATT,
+        key="capacity_watts",
+        translation_key="capacity",
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
@@ -204,11 +204,11 @@ class KirkHillSensor(CoordinatorEntity[KirkHillCoordinator], SensorEntity):
             return _pence_to_pounds(self.coordinator.data.savings_this_month_pence)
         if key == "savings_last_month_pence":
             return _pence_to_pounds(self.coordinator.data.savings_last_month_pence)
-        if key == "site_capacity_watts":
+        if key == "capacity_watts":
             current_value = (self.coordinator.data.current_summary or {}).get(key)
             if current_value is None:
                 current_value = self.coordinator.data.summary.get(key)
-            return _watts_to_megawatts(current_value)
+            return _watts_to_kilowatts(current_value)
         current_summary = self.coordinator.data.current_summary or {}
         if key in {"capacity_factor_percent", "active_turbines"}:
             return current_summary.get(key)
@@ -251,9 +251,9 @@ def _pence_to_pounds(value: float | None) -> float | None:
     return value / 100
 
 
-# Converts the API's raw watt value into megawatts for a more readable default display.
+# Converts the API's raw watt value into kilowatts so owner-scoped capacity does not round down to zero.
 # Human checked: No
-def _watts_to_megawatts(value: Any) -> float | None:
+def _watts_to_kilowatts(value: Any) -> float | None:
     if value is None:
         return None
-    return float(value) / 1_000_000
+    return float(value) / 1_000

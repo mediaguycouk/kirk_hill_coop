@@ -25,7 +25,7 @@ After installation, the integration creates sensors for:
 - `Wind speed`
 - `Capacity factor`
 - `Active turbines`
-- `Site capacity`
+- `Capacity`
 
 If you set a presumed net saving rate in pence per kWh, it also creates:
 
